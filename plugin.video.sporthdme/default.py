@@ -16,6 +16,7 @@ import requests
 from resources.modules import control, client
 from resources.modules import site_embedlivesports
 from resources.modules import site_futbollibre
+from resources.modules import site_tvsport
 import time
 from dateutil.parser import parse
 from dateutil.tz import gettz
@@ -24,7 +25,10 @@ from dateutil import parser, tz
 # Extra sports sites: one self-contained module each. To add a site, drop a
 # module exposing NAME/KEY/list_events()/resolve() and append it here.
 EXTRA_SITES = [site_embedlivesports, site_futbollibre]
-SITES = {s.KEY: s for s in EXTRA_SITES}
+# LIVE EVENTS menu entry: super.league.st died (Cloudflare 523, Sep 2026), so it
+# is served by the tvsport.guide schedule instead (same site_events flow).
+LIVE_SITE = site_tvsport
+SITES = {s.KEY: s for s in EXTRA_SITES + [LIVE_SITE]}
 
 _url = sys.argv[0]
 _handle = int(sys.argv[1])
@@ -84,7 +88,8 @@ def log_error(msg):
 
 def Main_menu():
     # addDir('[B][COLOR gold]Channels 24/7[/COLOR][/B]', 'https://1.livesoccer.sx/program.php', 14, ICON, FANART, '')
-    addDir('[B][COLOR white]LIVE EVENTS[/COLOR][/B]', Live_url, 'events', ICON, FANART, True)
+    addDir('[B][COLOR white]LIVE EVENTS[/COLOR][/B]', LIVE_SITE.KEY, 'site_events', ICON, FANART, True,
+           infoLabels={'title': 'LIVE EVENTS', 'plot': getattr(LIVE_SITE, 'DESC', '')})
     for _s in EXTRA_SITES:
         addDir('[B][COLOR deepskyblue]{0}[/COLOR][/B]'.format(_s.NAME),
                _s.KEY, 'site_events', ICON, FANART, True,
@@ -831,8 +836,12 @@ def site_events_menu(key):
                               encoding='utf-8', errors='replace')  # country code, else league
         title = six.ensure_text(e['title'], encoding='utf-8', errors='replace')
         cc = u'[COLOR orange][{0}][/COLOR] '.format(tag) if tag else u''
-        label = u'{0}[COLOR cyan]{1}[/COLOR] [COLOR {2}][B]{3}[/B][/COLOR]'.format(
-            cc, t, colors.get(e['status'], 'gold'), title)
+        if getattr(site, 'TAG_LAST', False):  # time + title first, league/sport tag at the end
+            label = u'[COLOR cyan]{0}[/COLOR] [COLOR {1}][B]{2}[/B][/COLOR]{3}'.format(
+                t, colors.get(e['status'], 'gold'), title, u' ' + cc.rstrip() if cc else u'')
+        else:
+            label = u'{0}[COLOR cyan]{1}[/COLOR] [COLOR {2}][B]{3}[/B][/COLOR]'.format(
+                cc, t, colors.get(e['status'], 'gold'), title)
         # carry the event's title + poster down the chain so the servers menu
         # and the player show the match, not the generic SportHD art.
         payload = json.dumps({'k': key, 's': e['servers'],
